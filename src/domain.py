@@ -2,15 +2,16 @@ from datetime import datetime
 
 
 class DomainError(Exception):
-    def __init__(self, code, message, status=400):
+    def __init__(self, code, message, status=400, details=None):
         super().__init__(message)
         self.code = code
         self.status = status
+        self.details = details or {}
 
 
 class ConflictError(DomainError):
-    def __init__(self, code, message):
-        super().__init__(code, message, 409)
+    def __init__(self, code, message, details=None):
+        super().__init__(code, message, 409, details)
 
 
 class NotFoundError(DomainError):
@@ -72,11 +73,19 @@ def normalize_create(payload):
     }
 
 
+def optional_number(payload, name, minimum=None, maximum=None):
+    if payload.get(name) is None:
+        return None
+    return number(payload, name, minimum, maximum)
+
+
 def normalize_source(payload):
     source_type = require_text(payload, "source_type")
     external_id = require_text(payload, "external_id")
     observed_at = parse_timestamp(payload, "observed_at")
     strength = number(payload, "strength_dbm")
+    bandwidth = optional_number(payload, "bandwidth_mhz", 0.001)
+    frequency = optional_number(payload, "frequency_mhz", 0.001, 300000)
     region = payload.get("region")
     if region is not None:
         region = str(region).strip() or None
@@ -85,7 +94,8 @@ def normalize_source(payload):
         "external_id": external_id,
         "observed_at": observed_at,
         "strength_dbm": strength,
+        "bandwidth_mhz": bandwidth,
+        "frequency_mhz": frequency,
         "region": region,
         "station_id": payload.get("station_id"),
-        "frequency_mhz": payload.get("frequency_mhz"),
     }

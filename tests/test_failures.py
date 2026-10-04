@@ -35,6 +35,15 @@ class FailureTest(unittest.TestCase):
         with self.assertRaises(ConflictError):
             self.service.create_item(self.payload, "m", "monitor")
         item = self.service.act(item["id"], "assess", {}, "m", "monitor", item["version"])
+        self.service.add_source(item["id"], {
+            "source_type": "fixed_monitor",
+            "external_id": "OBS-100",
+            "observed_at": "2026-09-27T11:05:00+00:00",
+            "strength_dbm": -55,
+            "bandwidth_mhz": 10.0,
+            "frequency_mhz": 5800.0,
+        }, "m", "monitor")
+        item = self.service.get_item(item["id"])
         item = self.service.act(item["id"], "locate", {"location": "x", "confidence": 0.8}, "f", "field_operator", item["version"])
         with self.assertRaises(DomainError) as forbidden:
             self.service.act(item["id"], "suspend", {"authorization_code": "REG-X"}, "f", "field_operator", item["version"], "west")
