@@ -20,6 +20,16 @@ def build_handler(service, static_dir):
             region = self.headers.get("X-Region", "").strip() or None
             return actor, role, region
 
+        def _request_id(self, payload):
+            rid = payload.get("request_id")
+            if rid is not None:
+                rid = str(rid).strip()
+                if rid:
+                    payload.pop("request_id", None)
+                    return rid
+            rid = self.headers.get("X-Request-Id", "").strip()
+            return rid or None
+
         def _json_body(self):
             length = int(self.headers.get("Content-Length", "0") or "0")
             if not length:
@@ -41,7 +51,11 @@ def build_handler(service, static_dir):
         def _error(self, exc):
             status = getattr(exc, "status", 500)
             code = getattr(exc, "code", "internal_error")
-            self._send(status, {"error": code, "message": str(exc)})
+            body = {"error": code, "message": str(exc)}
+            details = getattr(exc, "details", None)
+            if details:
+                body["details"] = details
+            self._send(status, body)
 
         def do_GET(self):
             try:
@@ -75,17 +89,18 @@ def build_handler(service, static_dir):
                 actor, role, region = self._identity()
                 path = urlparse(self.path).path
                 payload = self._json_body()
+                request_id = self._request_id(payload)
                 parts = [part for part in path.split("/") if part]
                 if parts == ["api", "items"]:
-                    return self._send(201, service.create_item(payload, actor, role, region))
+                    return self._send(201, service.create_item(payload, actor, role, region, request_id))
                 if len(parts) == 4 and parts[:2] == ["api", "items"] and parts[3] == "sources":
-                    return self._send(201, service.add_source(int(parts[2]), payload, actor, role, region))
+                    return self._send(201, service.add_source(int(parts[2]), payload, actor, role, region, request_id))
                 if len(parts) == 4 and parts[:2] == ["api", "items"] and parts[3] == "actions":
                     action = payload.pop("action", "")
                     if not action:
                         raise DomainError("action_required", "缺少 action", 400)
                     expected = payload.pop("expected_version", None)
-                    return self._send(200, service.act(int(parts[2]), action, payload, actor, role, expected, region))
+                    return self._send(200, service.act(int(parts[2]), action, payload, actor, role, expected, region, request_id))
                 return self._send(404, {"error": "not_found", "message": "接口不存在"})
             except DomainError as exc:
                 return self._error(exc)

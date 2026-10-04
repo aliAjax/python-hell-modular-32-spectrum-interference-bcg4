@@ -9,8 +9,9 @@ class DomainError(Exception):
 
 
 class ConflictError(DomainError):
-    def __init__(self, code, message):
+    def __init__(self, code, message, details=None):
         super().__init__(code, message, 409)
+        self.details = details or {}
 
 
 class NotFoundError(DomainError):
@@ -77,6 +78,9 @@ def normalize_source(payload):
     external_id = require_text(payload, "external_id")
     observed_at = parse_timestamp(payload, "observed_at")
     strength = number(payload, "strength_dbm")
+    bandwidth = payload.get("bandwidth_mhz")
+    if bandwidth is not None:
+        bandwidth = number(payload, "bandwidth_mhz", 0.001)
     region = payload.get("region")
     if region is not None:
         region = str(region).strip() or None
@@ -85,6 +89,7 @@ def normalize_source(payload):
         "external_id": external_id,
         "observed_at": observed_at,
         "strength_dbm": strength,
+        "bandwidth_mhz": bandwidth,
         "region": region,
         "station_id": payload.get("station_id"),
         "frequency_mhz": payload.get("frequency_mhz"),

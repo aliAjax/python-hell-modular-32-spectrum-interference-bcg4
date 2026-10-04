@@ -1,5 +1,327 @@
-<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>无线电频谱干扰调查</title><body><h1>无线电频谱干扰调查与协调</h1><p>使用 JSON API 创建干扰事件、记录来源、定位和执行处置动作。</p><pre>GET /health
-GET /api/state
-POST /api/items
-POST /api/items/{id}/sources
-POST /api/items/{id}/actions</pre></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>无线电频谱干扰调查与协调</title>
+<style>
+  :root { --ink:#1a2233; --muted:#5b6478; --line:#dfe3ec; --bg:#f5f7fb; --card:#ffffff; --accent:#2f6df6; --ok:#1f9d55; --warn:#b7791f; --err:#c53030; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--ink); color:#fff; padding:18px 28px; }
+  header h1 { margin:0 0 4px; font-size:20px; }
+  header p { margin:0; opacity:.75; font-size:13px; }
+  main { max-width:1080px; margin:0 auto; padding:24px; display:grid; grid-template-columns: 320px 1fr; gap:20px; align-items:start; }
+  @media (max-width: 880px){ main{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; }
+  .card h2 { margin:0 0 12px; font-size:15px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
+  input, select { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
+  button { margin-top:12px; padding:8px 14px; border:0; border-radius:6px; background:var(--accent); color:#fff; font-size:13px; cursor:pointer; }
+  button:hover { filter:brightness(1.08); }
+  button.ghost { background:#eef1f7; color:var(--ink); }
+  .item { border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:14px; background:var(--card); }
+  .item-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .item-title { font-weight:600; font-size:14px; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:20px; background:#eef1f7; color:var(--muted); }
+  .badge.ok { background:#e6f6ec; color:var(--ok); }
+  .badge.warn { background:#fdf3e2; color:var(--warn); }
+  .badge.err { background:#fde8e8; color:var(--err); }
+  .meta { font-size:12px; color:var(--muted); margin:6px 0; }
+  .basis { font-size:12px; margin:6px 0; padding:6px 9px; border-radius:6px; background:#f0f4ff; }
+  .basis.unconfirmed { background:#fde8e8; color:var(--err); }
+  details { margin-top:8px; }
+  summary { font-size:12px; color:var(--accent); cursor:pointer; }
+  .src-list, .audit-list { font-size:12px; margin:6px 0 0; padding:0; list-style:none; }
+  .src-list li, .audit-list li { padding:4px 0; border-bottom:1px dashed var(--line); }
+  .actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .actions button { margin-top:0; font-size:12px; padding:6px 10px; }
+  .form-row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:8px; }
+  .form-row > div { flex:1; min-width:120px; }
+  .banner { border-radius:8px; padding:10px 12px; font-size:13px; margin:10px 0; }
+  .banner.err { background:#fde8e8; color:var(--err); border:1px solid #f5c6c6; }
+  .banner.ok { background:#e6f6ec; color:var(--ok); border:1px solid #bfe6cd; }
+  .banner pre { margin:6px 0 0; white-space:pre-wrap; word-break:break-all; font-size:11px; }
+  .empty { color:var(--muted); font-size:13px; padding:20px; text-align:center; }
+  .id-input { display:flex; gap:6px; align-items:center; }
+  .id-input input { flex:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>无线电频谱干扰调查与协调</h1>
+  <p>干扰事件 · 观测来源 · 协调协议 · 停用授权 凭据链。当前依据取观测更晚的来源，晚到只进历史；协调确认后新来源改动强度/带宽将作废未执行授权与待结案。</p>
+</header>
+<main>
+  <section class="card">
+    <h2>新建干扰事件</h2>
+    <label>辖区 (X-Region)</label>
+    <input id="c-region" value="north">
+    <label>用户 (X-User-Id)</label>
+    <input id="c-user" value="analyst-1">
+    <label>角色 (X-Role)</label>
+    <input id="c-role" value="analyst">
+    <label>电台 station_id</label>
+    <input id="c-station" value="ST-01">
+    <label>频率 frequency_mhz</label>
+    <input id="c-freq" type="number" value="2400">
+    <label>带宽 bandwidth_mhz</label>
+    <input id="c-bw" type="number" value="20">
+    <label>强度 strength_dbm</label>
+    <input id="c-strength" type="number" value="-45">
+    <label>发现时间 detected_at (ISO)</label>
+    <input id="c-detected" value="2026-09-27T10:00:00+00:00">
+    <label>上报人 reporter</label>
+    <input id="c-reporter" value="monitor-1">
+    <label>请求编号 request_id（幂等，可选）</label>
+    <input id="c-rid" placeholder="留空则不启用幂等">
+    <button id="create-btn">创建事件</button>
+    <div id="create-msg"></div>
+  </section>
+
+  <section>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="id-input">
+        <h2 style="margin:0;">事件列表</h2>
+        <button class="ghost" id="refresh-btn" style="margin:0;">刷新</button>
+      </div>
+      <div id="items"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function headers(extra={}) {
+  return Object.assign({
+    "Content-Type": "application/json",
+    "X-User-Id": $("c-user").value.trim(),
+    "X-Role": $("c-role").value.trim(),
+    "X-Region": $("c-region").value.trim(),
+  }, extra);
+}
+
+function banner(container, kind, msg, detail) {
+  const div = document.createElement("div");
+  div.className = "banner " + kind;
+  div.textContent = msg;
+  if (detail) {
+    const pre = document.createElement("pre");
+    pre.textContent = typeof detail === "string" ? detail : JSON.stringify(detail, null, 2);
+    div.appendChild(pre);
+  }
+  container.innerHTML = "";
+  container.appendChild(div);
+}
+
+async function api(path, opts) {
+  const resp = await fetch(path, opts);
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const err = new Error(data.message || ("HTTP " + resp.status));
+    err.code = data.error;
+    err.details = data.details;
+    err.status = resp.status;
+    throw err;
+  }
+  return data;
+}
+
+function statusBadge(status) {
+  const map = { pending:"", assessed:"", located:"ok", suspended:"warn", coordinating:"warn", resolved:"ok", cancelled:"err" };
+  return '<span class="badge ' + (map[status]||"") + '">' + status + "</span>";
+}
+
+function basisHtml(item) {
+  const b = item.basis;
+  if (!item.basis_confirmed) {
+    return '<div class="basis unconfirmed">依据未确认：该事件没有观测来源记录，不能停用授权 / 协调 / 结案。请先提交观测来源。</div>';
+  }
+  return '<div class="basis">当前依据：来源 #' + b.source_id +
+    '（观测 ' + b.observed_at + '，强度 ' + b.strength_dbm + ' dBm，带宽 ' + (b.bandwidth_mhz==null?"—":b.bandwidth_mhz) + ' MHz）· 已确认</div>';
+}
+
+function sourcesHtml(item) {
+  if (!item.sources || !item.sources.length) return '<div class="empty">暂无来源记录</div>';
+  return '<details><summary>观测来源 (' + item.sources.length + ')</summary><ul class="src-list">' +
+    item.sources.map(s => '<li>#' + s.id + ' [' + s.source_type + '] ' + s.external_id +
+      ' · 观测 ' + s.observed_at + ' · 强度 ' + s.payload.strength_dbm +
+      (s.payload.bandwidth_mhz==null?"":" · 带宽 " + s.payload.bandwidth_mhz) + '</li>').join("") +
+    "</ul></details>";
+}
+
+function auditHtml(item) {
+  if (!item.audit || !item.audit.length) return "";
+  return '<details><summary>审计链 (' + item.audit.length + ')</summary><ul class="audit-list">' +
+    item.audit.map(a => '<li>#' + a.id + ' ' + a.event_type + ' · ' + (a.actor||"") + ' · ' + JSON.stringify(a.payload) + '</li>').join("") +
+    "</ul></details>";
+}
+
+function actionForm(item) {
+  const v = item.version;
+  const id = item.id;
+  const can = (roles) => roles.includes($("c-role").value.trim());
+  const btn = (label, act, extraFields, roles) => {
+    if (!can(roles)) return "";
+    return '<div class="form-row">' +
+      extraFields +
+      '<div><label>expected_version</label><input data-ev="'+id+'" value="'+v+'" readonly></div>' +
+      '<div><button data-act="'+act+'" data-id="'+id+'">'+label+'</button></div>' +
+      "</div>";
+  };
+  let html = '<div class="actions">';
+  html += btn("评估 assess", "assess", "", ["analyst","monitor"]);
+  html += btn("定位 locate", "locate",
+    '<div><label>位置</label><input data-f="location" placeholder="cell-7"></div>' +
+    '<div><label>置信度</label><input data-f="confidence" type="number" step="0.1" value="0.9"></div>',
+    ["field_operator","analyst"]);
+  html += btn("停用 suspend", "suspend",
+    '<div><label>授权编号 REG-*</label><input data-f="authorization_code" placeholder="REG-NORTH-1"></div>',
+    ["coordinator","regulator"]);
+  html += btn("协调 coordinate", "coordinate",
+    '<div><label>协调协议</label><input data-f="coordination_agreement" placeholder="AGC-7"></div>' +
+    '<div><label>备注</label><input data-f="note"></div>',
+    ["coordinator"]);
+  html += btn("结案 resolve", "resolve",
+    '<div><label>证据</label><input data-f="evidence" placeholder="scan-7"></div>' +
+    '<div><label>干扰已消除</label><select data-f="measurement_cleared"><option value="true">是</option><option value="false">否</option></select></div>',
+    ["coordinator","regulator"]);
+  html += btn("更正强度 correct", "correct_measurement",
+    '<div><label>新强度</label><input data-f="strength_dbm" type="number" value="-70"></div>' +
+    '<div><label>原因</label><input data-f="reason" placeholder="sensor drift"></div>',
+    ["analyst","monitor"]);
+  html += "</div>";
+  return html;
+}
+
+function sourceForm(item) {
+  return '<details><summary>提交观测来源</summary><div class="form-row">' +
+    '<div><label>来源类型</label><input data-s="source_type" placeholder="mobile_monitor"></div>' +
+    '<div><label>外部编号</label><input data-s="external_id" placeholder="MM-2"></div>' +
+    '<div><label>观测时间</label><input data-s="observed_at" value="2026-09-27T12:00:00+00:00"></div>' +
+    '<div><label>强度</label><input data-s="strength_dbm" type="number" value="-40"></div>' +
+    '<div><label>带宽 (可选)</label><input data-s="bandwidth_mhz" type="number" value="20"></div>' +
+    '<div><label>请求编号 (可选)</label><input data-s="request_id" placeholder="幂等"></div>' +
+    '<div><button data-src="'+item.id+'">提交来源</button></div>' +
+    "</div></details>";
+}
+
+function renderItem(item) {
+  const div = document.createElement("div");
+  div.className = "item";
+  div.innerHTML =
+    '<div class="item-head"><span class="item-title">#' + item.id + ' ' + item.payload.station_id + ' · ' + item.payload.region + '</span>' +
+    statusBadge(item.status) + '</div>' +
+    '<div class="meta">频率 ' + item.payload.frequency_mhz + ' MHz · 带宽 ' + item.payload.bandwidth_mhz + ' MHz · 强度 ' + item.payload.strength_dbm + ' dBm · 版本 v' + item.version + '</div>' +
+    basisHtml(item) +
+    sourcesHtml(item) +
+    auditHtml(item) +
+    sourceForm(item) +
+    '<div class="item-msg"></div>' +
+    actionForm(item);
+  return div;
+}
+
+async function loadItems() {
+  const data = await api("/api/state");
+  const wrap = $("items");
+  wrap.innerHTML = "";
+  if (!data.items || !data.items.length) {
+    wrap.innerHTML = '<div class="empty">暂无事件</div>';
+    return;
+  }
+  for (const raw of data.items) {
+    const item = await api("/api/items/" + raw.id);
+    wrap.appendChild(renderItem(item));
+  }
+}
+
+$("refresh-btn").onclick = loadItems;
+
+$("create-btn").onclick = async () => {
+  const msg = $("create-msg");
+  const body = {
+    frequency_mhz: parseFloat($("c-freq").value),
+    bandwidth_mhz: parseFloat($("c-bw").value),
+    station_id: $("c-station").value.trim(),
+    region: $("c-region").value.trim(),
+    strength_dbm: parseFloat($("c-strength").value),
+    detected_at: $("c-detected").value.trim(),
+    reporter: $("c-reporter").value.trim(),
+  };
+  const rid = $("c-rid").value.trim();
+  if (rid) body.request_id = rid;
+  try {
+    const item = await api("/api/items", { method:"POST", headers:headers(), body:JSON.stringify(body) });
+    banner(msg, "ok", "已创建事件 #" + item.id + "，版本 v" + item.version + "（初始上报已作为第一份来源，依据已确认）");
+    loadItems();
+  } catch (e) {
+    banner(msg, "err", "创建失败：" + e.code + " · " + e.message, e.details);
+  }
+};
+
+document.addEventListener("click", async (ev) => {
+  const actBtn = ev.target.closest("[data-act]");
+  const srcBtn = ev.target.closest("[data-src]");
+  if (srcBtn) {
+    const id = srcBtn.dataset.src;
+    const item = srcBtn.closest(".item");
+    const msg = item.querySelector(".item-msg");
+    const get = (f) => { const el = item.querySelector('[data-s="'+f+'"]'); return el ? el.value.trim() : ""; };
+    const body = {
+      source_type: get("source_type"),
+      external_id: get("external_id"),
+      observed_at: get("observed_at"),
+      strength_dbm: parseFloat(get("strength_dbm")),
+      region: $("c-region").value.trim(),
+    };
+    const bw = get("bandwidth_mhz");
+    if (bw) body.bandwidth_mhz = parseFloat(bw);
+    const rid = get("request_id");
+    if (rid) body.request_id = rid;
+    try {
+      const r = await api("/api/items/" + id + "/sources", { method:"POST", headers:headers(), body:JSON.stringify(body) });
+      const note = r.basis_changed ? "，已成为新的当前依据" : "，观测时间不晚于当前依据，仅入历史";
+      banner(msg, "ok", "来源 #" + r.id + " 已入账" + note);
+      loadItems();
+    } catch (e) {
+      banner(msg, "err", "提交来源失败：" + e.code + " · " + e.message, e.details);
+    }
+    return;
+  }
+  if (actBtn) {
+    const id = actBtn.dataset.id;
+    const action = actBtn.dataset.act;
+    const item = actBtn.closest(".item");
+    const msg = item.querySelector(".item-msg");
+    const get = (f) => { const el = item.querySelector('[data-f="'+f+'"]'); return el ? el.value : ""; };
+    const body = { action: action, expected_version: parseInt(item.querySelector('[data-ev="'+id+'"]').value, 10) };
+    ["location","confidence","authorization_code","coordination_agreement","note","evidence","strength_dbm","reason"].forEach(f => {
+      const el = item.querySelector('[data-f="'+f+'"]');
+      if (el && el.value !== "") body[f] = (f==="confidence"||f==="strength_dbm") ? parseFloat(el.value) : el.value;
+    });
+    const mc = item.querySelector('[data-f="measurement_cleared"]');
+    if (mc) body.measurement_cleared = mc.value === "true";
+    try {
+      const updated = await api("/api/items/" + id + "/actions", { method:"POST", headers:headers(), body:JSON.stringify(body) });
+      banner(msg, "ok", action + " 完成，当前状态 " + updated.status + "，版本 v" + updated.version);
+      loadItems();
+    } catch (e) {
+      let detail = e.details;
+      if (e.code === "version_conflict" && e.details) {
+        detail = Object.assign({}, e.details, {
+          hint: "后到请求请按 latest_version 重新读取后重做；冲突项为已生效的结论。",
+        });
+      }
+      banner(msg, "err", "操作失败：" + e.code + " · " + e.message, detail);
+    }
+  }
+});
+
+loadItems().catch(e => {
+  $("items").innerHTML = '<div class="empty">加载失败：' + e.message + '</div>';
+});
+</script>
+</body>
+</html>
